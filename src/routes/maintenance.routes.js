@@ -11,7 +11,7 @@ const {
 const auth = require("../middleware/auth");
 const role = require("../middleware/role");
 
-//  Manager / Super Manager creates a maintenance request
+//  Manager / Sub Manager creates a maintenance request
 router.post(
   "/",
   auth,
@@ -19,27 +19,27 @@ router.post(
   createRequest
 );
 
-//  Manager / Super Manager get all maintenance requests for their building
+//  Manager / Sub Manager get all maintenance requests for their building
 router.get(
   "/",
   auth,
-  role("MANAGER", "SUPER_MANAGER"),
+  role("MANAGER", "SUB_MANAGER"),
   getRequests
 );
 
-// Manager / Super Manager update a request (status / assign someone)
+// Manager / Sub Manager update a request (status / assign someone)
 router.patch(
   "/:requestId",
   auth,
-  role("MANAGER", "SUPER_MANAGER"),
+  role("MANAGER", "SUB_MANAGER"),
   updateRequest
 );
 
-//  Get a single request by ID (Manager/Super Manager)
+//  Get a single request by ID (Manager/Sub Manager)
 router.get(
   "/:requestId",
   auth,
-  role("MANAGER", "SUPER_MANAGER"),
+  role("MANAGER", "SUB_MANAGER"),
   getRequestById
 );
 

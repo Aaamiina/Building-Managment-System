@@ -2,514 +2,352 @@ const Floor = require("../models/Floor");
 const Room = require("../models/Room");
 const Person = require("../models/Person");
 const Building = require("../models/Building");
-const User = require("../models/User");   
+const User = require("../models/User");
+const ActionRequest = require("../models/ActionRequest");
 const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
 
-
-
+// --- HELPER: HELO BUILDING-KA USER-KA ---
 const getBuildingForUser = async (user) => {
-  if (user.role === "MANAGER") {
-    return await Building.findOne({ manager: user.id });
+  try {
+    if (!user) return null;
+    if (user.role === "MANAGER") {
+      return await Building.findOne({ manager: user.id || user._id });
+    }
+    if (user.role === "SUB_MANAGER") {
+      const bId = user.building || user.buildingId;
+      if (!bId) return null;
+      return await Building.findById(bId);
+    }
+    return null;
+  } catch (err) {
+    console.error("Helper Error:", err);
+    return null;
   }
-
-  if (user.role === "SUB_MANAGER") {
-    return await Building.findById(user.building);
-  }
-
-  return null;
 };
 
-const canUpdate = (user) =>
-  user.role === "MANAGER" || user.role === "SUPER_MANAGER";
+// --- HELPER: MAAMULIDDA CODSIYADA (SUB-MANAGER ONLY) ---
+const handleAction = async (req, res, targetType, actionType, targetId, payload = null) => {
+  const user = req.user;
+  if (user.role === "SUB_MANAGER" && (actionType === "UPDATE" || actionType === "DELETE")) {
+    const building = await getBuildingForUser(user);
+    if (!building) return res.status(400).json({ message: "Building configuration missing" });
 
-const canDelete = (user) =>
-  user.role === "MANAGER";
+    const request = new ActionRequest({
+      requestedBy: user.id,
+      building: building._id,
+      actionType,
+      targetType,
+      targetId,
+      payload,
+      status: "PENDING"
+    });
 
-// ---------------------- SUB-MANAGER ----------------------
+    await request.save();
+    return res.status(202).json({
+      message: "Codsigan wuxuu u baahan yahay ansixin Manager",
+      isPending: true
+    });
+  }
+  return false;
+};
 
-// Create Sub-Manager
+// --- SUB-MANAGER CONTROLLERS ---
 exports.createSubManager = async (req, res) => {
   const { name, email, password } = req.body;
-  const managerId = req.user.id;
-
   try {
-    if (req.user.role !== "MANAGER") {
-      return res.status(403).json({ message: "Only managers can create sub-managers" });
-    }
-
-    const existing = await User.findOne({ email });
+    const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) return res.status(400).json({ message: "Email already exists" });
 
     const building = await getBuildingForUser(req.user);
-    if (!building) return res.status(400).json({ message: "Manager has no building assigned" });
+    if (!building) return res.status(400).json({ message: "Manager building not found" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const subManager = new User({
       name,
-      email,
+      email: email.toLowerCase(),
       password: hashedPassword,
       role: "SUB_MANAGER",
       building: building._id,
-      parentManager: managerId
+      parentManager: req.user.id
     });
-
     await subManager.save();
-
     res.status(201).json({ message: "Sub-manager created", subManager });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };
 
-
-// GET Sub-Managers
 exports.getSubManagers = async (req, res) => {
   try {
-    if (req.user.role !== "MANAGER") {
-      return res.status(403).json({ message: "Only manager can view sub-managers" });
-    }
-
-    const subManagers = await User.find({ parentManager: req.user.id, role: "SUB_MANAGER" })
-      .select("name email createdAt")
-      .sort({ createdAt: -1 });
-
+    const subManagers = await User.find({ parentManager: req.user.id }).select("-password");
     res.json(subManagers);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
+  } catch (err) { res.status(500).json({ message: "Error fetching sub-managers" }); }
 };
 
 
-//update sub manager
 exports.updateSubManager = async (req, res) => {
   const { subManagerId } = req.params;
   const { name, email, password } = req.body;
-  const manager = req.user;
 
   try {
-    // Validate ID
-    if (!mongoose.Types.ObjectId.isValid(subManagerId)) {
-      return res.status(400).json({ message: "Invalid sub-manager ID" });
-    }
-
-    // Only MANAGER can update
-    if (manager.role !== "MANAGER") {
-      return res.status(403).json({ message: "Only managers can update sub-managers" });
-    }
-
+    // 1. Hel Sub-manager-ka oo hubi inuu jiro
     const subManager = await User.findById(subManagerId);
-
     if (!subManager || subManager.role !== "SUB_MANAGER") {
       return res.status(404).json({ message: "Sub-manager not found" });
     }
 
-    // Ensure ownership
-    if (subManager.parentManager.toString() !== manager.id) {
-      return res.status(403).json({ message: "Not authorized" });
+    // 2. Hubi in Manager-ka codsanaya uu isagu leeyahay Sub-manager-kan
+    if (subManager.parentManager.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized to update this sub-manager" });
     }
 
-    // Update fields
-    if (name !== undefined) subManager.name = name;
-    if (email !== undefined) subManager.email = email;
+    // 3. Cusboonaysii xogta
+    if (name) subManager.name = name.trim();
+    if (email) {
+      const existing = await User.findOne({ email: email.toLowerCase(), _id: { $ne: subManagerId } });
+      if (existing) return res.status(400).json({ message: "Email already in use by another user" });
+      subManager.email = email.toLowerCase().trim();
+    }
 
     if (password) {
-      subManager.password = await bcrypt.hash(password, 10);
+      const salt = await bcrypt.genSalt(10);
+      subManager.password = await bcrypt.hash(password, salt);
     }
 
     await subManager.save();
-
-    res.json({
-      message: "Sub-manager updated successfully",
-      subManager
-    });
-
+    res.json({ message: "Sub-manager updated successfully", subManager: { name: subManager.name, email: subManager.email } });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error during update", error: err.message });
   }
 };
 
 
-// DELETE sub-manager
+
 exports.deleteSubManager = async (req, res) => {
   const { subManagerId } = req.params;
-  const manager = req.user;
 
   try {
-    if (!mongoose.Types.ObjectId.isValid(subManagerId)) {
-      return res.status(400).json({ message: "Invalid sub-manager ID" });
-    }
-
-    if (manager.role !== "MANAGER") {
-      return res.status(403).json({ message: "Only managers can delete sub-managers" });
-    }
-
     const subManager = await User.findById(subManagerId);
 
     if (!subManager || subManager.role !== "SUB_MANAGER") {
       return res.status(404).json({ message: "Sub-manager not found" });
     }
 
-    // Ownership check
-    if (subManager.parentManager.toString() !== manager.id) {
-      return res.status(403).json({ message: "Not authorized" });
+    // Hubi in Manager-ka codsanaya uu yahay kii abuuray
+    if (subManager.parentManager.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized to delete this sub-manager" });
     }
 
-    await subManager.deleteOne();
-
+    await User.findByIdAndDelete(subManagerId);
     res.json({ message: "Sub-manager deleted successfully" });
-
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error during deletion", error: err.message });
   }
 };
-
-
-////////////// FLOORS //////////////////
-
-//add floor
-exports.addFloor = async (req, res) => {
-  const { floorNumber } = req.body;
-
-  try {
-    const building = await getBuildingForUser(req.user);
-    if (!building) {
-      return res.status(400).json({ message: "Building not found" });
-    }
-
-    const floor = new Floor({
-      floorNumber,
-      building: building._id
-    });
-
-    await floor.save();
-    res.status(201).json({ message: "Floor added", floor });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-
-//get floor
+// --- FLOOR CONTROLLERS ---
 exports.getFloors = async (req, res) => {
   try {
     const building = await getBuildingForUser(req.user);
     if (!building) return res.status(404).json({ message: "Building not found" });
-
     const floors = await Floor.find({ building: building._id }).sort({ floorNumber: 1 });
     res.json(floors);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
+  } catch (err) { res.status(500).json({ message: "Internal Server Error" }); }
 };
 
-// update floor
+exports.addFloor = async (req, res) => {
+  try {
+    const building = await getBuildingForUser(req.user);
+    if (!building) return res.status(400).json({ message: "Building missing" });
+    const floor = new Floor({ floorNumber: req.body.floorNumber, building: building._id });
+    await floor.save();
+    res.status(201).json(floor);
+  } catch (err) { res.status(500).json({ message: "Error adding floor" }); }
+};
+
 exports.updateFloor = async (req, res) => {
   const { floorId } = req.params;
-  const { floorNumber } = req.body;
-  const user = req.user;
-
   try {
-    if (!canUpdate(user))
-      return res.status(403).json({ message: "Update not allowed" });
-
-    const floor = await Floor.findById(floorId).populate("building");
-    if (!floor) return res.status(404).json({ message: "Floor not found" });
-
-    if (!floor.building) {
-      return res.status(400).json({ message: "Floor does not belong to a valid building" });
-    }
-
-    if (floor.building.manager.toString() !== user.id) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
-    floor.floorNumber = floorNumber ?? floor.floorNumber;
-    await floor.save();
-
-    res.json({ message: "Floor updated", floor });
-  } catch (err) {
-    console.error("Update floor error:", err); // <-- log the real error
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
+    const isPending = await handleAction(req, res, "FLOOR", "UPDATE", floorId, req.body);
+    if (isPending) return;
+    const floor = await Floor.findByIdAndUpdate(floorId, req.body, { new: true });
+    res.json(floor);
+  } catch (err) { res.status(500).json({ message: "Error updating floor" }); }
 };
 
-
-
-//delete floor
 exports.deleteFloor = async (req, res) => {
   const { floorId } = req.params;
-  const user = req.user;
-
   try {
-    if (!canDelete(user))
-      return res.status(403).json({ message: "Only manager can delete" });
-
-    const floor = await Floor.findById(floorId).populate("building");
-    if (!floor) return res.status(404).json({ message: "Floor not found" });
-
-    if (floor.building.manager.toString() !== user.id)
-      return res.status(403).json({ message: "Not authorized" });
-
-    const rooms = await Room.countDocuments({ floor: floorId });
-    if (rooms > 0)
-      return res.status(400).json({ message: "Delete rooms first" });
-
-    await floor.deleteOne();
+    const isPending = await handleAction(req, res, "FLOOR", "DELETE", floorId);
+    if (isPending) return;
+    await Floor.findByIdAndDelete(floorId);
     res.json({ message: "Floor deleted" });
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
-  }
+  } catch (err) { res.status(500).json({ message: "Error deleting floor" }); }
 };
 
-
-/////////////////// ROOMS //////////////////////
-
-// Add Room
-exports.addRoom = async (req, res) => {
-  const { floorId, roomNumber, type, capacity } = req.body;
-
-  try {
-    const floor = await Floor.findById(floorId).populate("building");
-    if (!floor) {
-      return res.status(400).json({ message: "Floor not found" });
-    }
-
-    const building = await getBuildingForUser(req.user);
-    if (!building || floor.building._id.toString() !== building._id.toString()) {
-      return res.status(403).json({ message: "You cannot add room to this floor" });
-    }
-
-    const room = new Room({
-      roomNumber,
-      type,
-      capacity,
-      floor: floorId
-    });
-
-    await room.save();
-    res.status(201).json({ message: "Room added", room });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-
-
-// GET Rooms
+// --- ROOM CONTROLLERS ---
 exports.getRooms = async (req, res) => {
   try {
     const building = await getBuildingForUser(req.user);
     if (!building) return res.status(404).json({ message: "Building not found" });
-
     const floors = await Floor.find({ building: building._id });
     const floorIds = floors.map(f => f._id);
-
-    const rooms = await Room.find({ floor: { $in: floorIds } })
-      .populate("floor", "floorNumber")
-      .sort({ roomNumber: 1 });
-
+    const rooms = await Room.find({ floor: { $in: floorIds } }).populate("floor", "floorNumber");
     res.json(rooms);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
+  } catch (err) { res.status(500).json({ message: "Error fetching rooms" }); }
 };
 
-
-//update room
-exports.updateRoom = async (req, res) => {
-  const { roomId } = req.params;
-  const { roomNumber, type, capacity } = req.body;
-  const user = req.user;
-
+exports.addRoom = async (req, res) => {
   try {
-    if (!canUpdate(user))
-      return res.status(403).json({ message: "Update not allowed" });
+    const { roomNumber, type, capacity, floorId } = req.body;
 
-    const room = await Room.findById(roomId).populate({
-      path: "floor",
-      populate: { path: "building" }
+    // 1. Hubi in xogta muhiimka ah ay timid
+    if (!roomNumber || !floorId) {
+      return res.status(400).json({ message: "roomNumber iyo floorId waa khasab" });
+    }
+
+    // 2. Hubi in Floor-ku uu jiro
+    const floorExists = await Floor.findById(floorId);
+    if (!floorExists) {
+      return res.status(404).json({ message: "Dabaqa la doonayo lama helin" });
+    }
+
+    // 3. Abuur qolka
+    const room = new Room({
+      roomNumber,
+      type,
+      capacity,
+      floor: floorId, // Hubi in magaca field-ka uu yahay 'floor' sida Model-kaagu yahay
+      status: "AVAILABLE"
     });
-
-    if (!room) return res.status(404).json({ message: "Room not found" });
-
-    if (room.floor.building.manager.toString() !== user.id)
-      return res.status(403).json({ message: "Not authorized" });
-
-    room.roomNumber = roomNumber ?? room.roomNumber;
-    room.type = type ?? room.type;
-    room.capacity = capacity ?? room.capacity;
 
     await room.save();
-    res.json({ message: "Room updated", room });
+    res.status(201).json(room);
+
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    console.error("ADD ROOM ERROR:", err); // Tani waxay ku tusaysaa Terminal-ka ciladda dhabta ah
+    res.status(500).json({
+      message: "Internal Server Error",
+      error: err.message
+    });
   }
 };
 
+exports.updateRoom = async (req, res) => {
+  try {
+    const isPending = await handleAction(req, res, "ROOM", "UPDATE", req.params.roomId, req.body);
+    if (isPending) return;
+    const room = await Room.findByIdAndUpdate(req.params.roomId, req.body, { new: true });
+    res.json(room);
+  } catch (err) { res.status(500).json({ message: "Error updating room" }); }
+};
 
-//delete room
 exports.deleteRoom = async (req, res) => {
-  const { roomId } = req.params;
-  const user = req.user;
-
   try {
-    if (!canDelete(user))
-      return res.status(403).json({ message: "Only manager can delete" });
-
-    const room = await Room.findById(roomId).populate({
-      path: "floor",
-      populate: { path: "building" }
-    });
-
-    if (!room) return res.status(404).json({ message: "Room not found" });
-
-    if (room.floor.building.manager.toString() !== user.id)
-      return res.status(403).json({ message: "Not authorized" });
-
-    await Person.deleteMany({ room: roomId });
-    await room.deleteOne();
-
+    const isPending = await handleAction(req, res, "ROOM", "DELETE", req.params.roomId);
+    if (isPending) return;
+    await Room.findByIdAndDelete(req.params.roomId);
     res.json({ message: "Room deleted" });
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
-  }
+  } catch (err) { res.status(500).json({ message: "Error deleting room" }); }
 };
 
+// --- PERSON CONTROLLERS ---
+exports.getPeople = async (req, res) => {
+  try {
+    const building = await getBuildingForUser(req.user);
+    if (!building) return res.status(404).json({ message: "Building missing" });
 
-////////////////////// PERSON /////////////////////////////////
-//assign person
+    // Waxaan soo qaadaynaa dadka, waxaana soo raacinaynaa xogta qolka (Room Data)
+    const people = await Person.find({ building: building._id })
+      .populate({
+        path: 'room',         // Field-ka ku jira Person model
+        select: 'roomNumber'  // Kaliya soo qaad nambarka qolka
+      });
+
+    console.log("People Found:", people); // Ka eeg terminal-ka haddii 'room' uu yahay null
+    res.json(people);
+  } catch (err) {
+    console.error("Error in getPeople:", err);
+    res.status(500).json({ message: "Error fetching people" });
+  }
+};
 exports.assignPerson = async (req, res) => {
-  const { name, phone, type, roomId } = req.body;
+  // Hubi in 'room' uu yahay magaca aad ka soo dirayso Frontend-ka
+  const { name, phone, type, room, buildingId } = req.body; 
 
   try {
-    const room = await Room.findById(roomId).populate({
-      path: "floor",
-      populate: { path: "building" }
-    });
-
-    if (!room) {
-      return res.status(400).json({ message: "Room not found" });
-    }
-
-    const building = await getBuildingForUser(req.user);
-    if (!building || room.floor.building._id.toString() !== building._id.toString()) {
-      return res.status(403).json({ message: "You cannot assign person to this room" });
-    }
-
     const person = new Person({
       name,
       phone,
       type,
-      room: roomId,
-      building: building._id
+      room, // Halkan waa inuu ahaadaa ObjectId-ga qolka
+      building: buildingId
     });
 
     await person.save();
-    res.status(201).json({ message: "Person assigned", person });
 
+    // Marka qofka la deajiyo, qolka xaaladiisa beddel
+    if (room) {
+      const Room = require("../models/Room");
+      await Room.findByIdAndUpdate(room, { status: "OCCUPIED" });
+    }
+
+    res.status(201).json(person);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: err.message });
   }
 };
 
+exports.updatePerson = async (req, res) => {
+  try {
+    const isPending = await handleAction(req, res, "PERSON", "UPDATE", req.params.personId, req.body);
+    if (isPending) return;
+    const person = await Person.findByIdAndUpdate(req.params.personId, req.body, { new: true });
+    res.json(person);
+  } catch (err) { res.status(500).json({ message: "Error" }); }
+};
 
-//get peaple
-exports.getPeople = async (req, res) => {
+exports.deletePerson = async (req, res) => {
+  try {
+    const isPending = await handleAction(req, res, "PERSON", "DELETE", req.params.personId);
+    if (isPending) return;
+    const person = await Person.findById(req.params.personId);
+    if (person && person.room) await Room.findByIdAndUpdate(person.room, { status: "AVAILABLE" });
+    await Person.findByIdAndDelete(req.params.personId);
+    res.json({ message: "Person record deleted" });
+  } catch (err) { res.status(500).json({ message: "Error" }); }
+};
+
+// --- APPROVALS (MANAGER ONLY) ---
+exports.getPendingRequests = async (req, res) => {
   try {
     const building = await getBuildingForUser(req.user);
-    if (!building) return res.status(404).json({ message: "Building not found" });
-
-    const people = await Person.find({ building: building._id })
-      .populate("room", "roomNumber type")
-      .sort({ name: 1 });
-
-    res.json(people);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
+    const requests = await ActionRequest.find({
+      building: building._id,
+      status: "PENDING"
+    }).populate("requestedBy", "name email");
+    res.json(requests);
+  } catch (err) { res.status(500).json({ message: "Error fetching requests" }); }
 };
 
-
-//update person
-exports.updatePerson = async (req, res) => {
-  const { personId } = req.params;
-  const { name, phone, type } = req.body;
-  const user = req.user;
-
+exports.reviewRequest = async (req, res) => {
+  const { id } = req.params;
+  const { status, reason } = req.body;
   try {
-    if (!mongoose.Types.ObjectId.isValid(personId)) {
-      return res.status(400).json({ message: "Invalid person ID" });
+    const request = await ActionRequest.findById(id);
+    if (!request) return res.status(404).json({ message: "Request not found" });
+
+    if (status === "APPROVED") {
+      const { targetType, targetId, actionType, payload } = request;
+      let Model;
+      if (targetType === "FLOOR") Model = Floor;
+      else if (targetType === "ROOM") Model = Room;
+      else if (targetType === "PERSON") Model = Person;
+
+      if (actionType === "UPDATE") await Model.findByIdAndUpdate(targetId, payload);
+      else if (actionType === "DELETE") await Model.findByIdAndDelete(targetId);
     }
-
-    if (!canUpdate(user)) {
-      return res.status(403).json({ message: "Update not allowed" });
-    }
-
-    const person = await Person.findById(personId);
-    if (!person) {
-      return res.status(404).json({ message: "Person not found" });
-    }
-
-    //  Load building separately
-    const building = await Building.findById(person.building);
-    if (!building) {
-      return res.status(400).json({ message: "Building not found" });
-    }
-
-    if (building.manager.toString() !== user.id) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
-    // Update fields
-    if (name !== undefined) person.name = name;
-    if (phone !== undefined) person.phone = phone;
-    if (type !== undefined) person.type = type;
-
-    await person.save();
-
-    res.json({ message: "Person updated", person });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
+    request.status = status;
+    request.reason = reason;
+    await request.save();
+    res.json({ message: `Request ${status}` });
+  } catch (err) { res.status(500).json({ message: "Error processing request" }); }
 };
-
-
-
-//delete person
-exports.deletePerson = async (req, res) => {
-  const { personId } = req.params;
-  const user = req.user;
-
-  try {
-    if (!canDelete(user))
-      return res.status(403).json({ message: "Only manager can delete" });
-
-    const person = await Person.findById(personId).populate("building");
-    if (!person) return res.status(404).json({ message: "Person not found" });
-
-    if (person.building.manager.toString() !== user.id)
-      return res.status(403).json({ message: "Not authorized" });
-
-    await person.deleteOne();
-    res.json({ message: "Person removed" });
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
-

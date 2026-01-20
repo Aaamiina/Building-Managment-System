@@ -7,12 +7,23 @@ const ActionRequest = require("../models/ActionRequest");
 
 // CREATE FLOOR (allowed)
 exports.createFloor = async (req, res) => {
-  const floor = await Floor.create({
-    name: req.body.name,
-    building: req.user.building
-  });
+  try {
+    const { floorNumber } = req.body;
+    
+    if (!req.user.building) {
+      return res.status(400).json({ message: "User must be assigned to a building" });
+    }
 
-  res.status(201).json(floor);
+    const floor = await Floor.create({
+      floorNumber: floorNumber || req.body.name, // Support both field names for backward compatibility
+      building: req.user.building
+    });
+
+    res.status(201).json(floor);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
 };
 
 // UPDATE FLOOR (approval)
@@ -27,12 +38,12 @@ exports.updateFloor = async (req, res) => {
 
     // CREATE APPROVAL REQUEST
     await ActionRequest.create({
-      action: "UPDATE_FLOOR",
+      actionType: "UPDATE",
+      targetType: "FLOOR",
       targetId: floor._id,
-      building: floor.building,     // ✅ REQUIRED FIELD
+      building: floor.building,     //  REQUIRED FIELD
       payload: { floorNumber },
       requestedBy: req.user.id,
-      role: "SUB_MANAGER",
       status: "PENDING"
     });
 
@@ -51,15 +62,24 @@ exports.updateFloor = async (req, res) => {
 
 // DELETE FLOOR (approval only)
 exports.deleteFloor = async (req, res) => {
-  await ActionRequest.create({
-    requestedBy: req.user.id,
-    building: req.user.building,
-    actionType: "DELETE",
-    targetType: "FLOOR",
-    targetId: req.params.id
-  });
+  try {
+    if (!req.user.building) {
+      return res.status(400).json({ message: "User must be assigned to a building" });
+    }
 
-  res.json({ message: "Floor delete request sent for approval" });
+    await ActionRequest.create({
+      requestedBy: req.user.id,
+      building: req.user.building,
+      actionType: "DELETE",
+      targetType: "FLOOR",
+      targetId: req.params.id
+    });
+
+    res.json({ message: "Floor delete request sent for approval" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
 };
 
 
@@ -67,39 +87,66 @@ exports.deleteFloor = async (req, res) => {
 
 // CREATE ROOM
 exports.createRoom = async (req, res) => {
-  const room = await Room.create({
-    ...req.body,
-    building: req.user.building
-  });
+  try {
+    if (!req.user.building) {
+      return res.status(400).json({ message: "User must be assigned to a building" });
+    }
 
-  res.status(201).json(room);
+    const room = await Room.create({
+      ...req.body,
+      building: req.user.building
+    });
+
+    res.status(201).json(room);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
 };
 
 // UPDATE ROOM (approval)
 exports.updateRoom = async (req, res) => {
-  await ActionRequest.create({
-    requestedBy: req.user.id,
-    building: req.user.building,
-    actionType: "UPDATE",
-    targetType: "ROOM",
-    targetId: req.params.id,
-    payload: req.body
-  });
+  try {
+    if (!req.user.building) {
+      return res.status(400).json({ message: "User must be assigned to a building" });
+    }
 
-  res.json({ message: "Room update request sent for approval" });
+    await ActionRequest.create({
+      requestedBy: req.user.id,
+      building: req.user.building,
+      actionType: "UPDATE",
+      targetType: "ROOM",
+      targetId: req.params.id,
+      payload: req.body
+    });
+
+    res.json({ message: "Room update request sent for approval" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
 };
 
 // DELETE ROOM (approval)
 exports.deleteRoom = async (req, res) => {
-  await ActionRequest.create({
-    requestedBy: req.user.id,
-    building: req.user.building,
-    actionType: "DELETE",
-    targetType: "ROOM",
-    targetId: req.params.id
-  });
+  try {
+    if (!req.user.building) {
+      return res.status(400).json({ message: "User must be assigned to a building" });
+    }
 
-  res.json({ message: "Room delete request sent for approval" });
+    await ActionRequest.create({
+      requestedBy: req.user.id,
+      building: req.user.building,
+      actionType: "DELETE",
+      targetType: "ROOM",
+      targetId: req.params.id
+    });
+
+    res.json({ message: "Room delete request sent for approval" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
 };
 
 
@@ -107,37 +154,64 @@ exports.deleteRoom = async (req, res) => {
 
 // ASSIGN PERSON
 exports.createPerson = async (req, res) => {
-  const person = await Person.create({
-    ...req.body,
-    building: req.user.building
-  });
+  try {
+    if (!req.user.building) {
+      return res.status(400).json({ message: "User must be assigned to a building" });
+    }
 
-  res.status(201).json(person);
+    const person = await Person.create({
+      ...req.body,
+      building: req.user.building
+    });
+
+    res.status(201).json(person);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
 };
 
 // UPDATE PERSON (approval)
 exports.updatePerson = async (req, res) => {
-  await ActionRequest.create({
-    requestedBy: req.user.id,
-    building: req.user.building,
-    actionType: "UPDATE",
-    targetType: "PERSON",
-    targetId: req.params.id,
-    payload: req.body
-  });
+  try {
+    if (!req.user.building) {
+      return res.status(400).json({ message: "User must be assigned to a building" });
+    }
 
-  res.json({ message: "Person update request sent for approval" });
+    await ActionRequest.create({
+      requestedBy: req.user.id,
+      building: req.user.building,
+      actionType: "UPDATE",
+      targetType: "PERSON",
+      targetId: req.params.id,
+      payload: req.body
+    });
+
+    res.json({ message: "Person update request sent for approval" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
 };
 
 // DELETE PERSON (approval)
 exports.deletePerson = async (req, res) => {
-  await ActionRequest.create({
-    requestedBy: req.user.id,
-    building: req.user.building,
-    actionType: "DELETE",
-    targetType: "PERSON",
-    targetId: req.params.id
-  });
+  try {
+    if (!req.user.building) {
+      return res.status(400).json({ message: "User must be assigned to a building" });
+    }
 
-  res.json({ message: "Person delete request sent for approval" });
+    await ActionRequest.create({
+      requestedBy: req.user.id,
+      building: req.user.building,
+      actionType: "DELETE",
+      targetType: "PERSON",
+      targetId: req.params.id
+    });
+
+    res.json({ message: "Person delete request sent for approval" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
 };

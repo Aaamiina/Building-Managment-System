@@ -1,19 +1,26 @@
 const Maintenance = require("../models/Maintenance");
 const Building = require("../models/Building");
+const User = require("../models/User");
 
-// Create a maintenance request (Manager / Super Manager)
+// Create a maintenance request (Manager / Sub Manager)
 exports.createRequest = async (req, res) => {
   const { title, description, building, floor, room, reportedByName } = req.body;
-  const user = req.user; // Manager or Super Manager creating the request
+  const user = req.user; // Manager or Sub Manager creating the request
 
   try {
+    // Use user's building if not provided in request
+    const buildingId = building || user.building;
+    if (!buildingId) {
+      return res.status(400).json({ message: "Building is required" });
+    }
+
     const newRequest = new Maintenance({
       title,
       description,
-      building,
+      building: buildingId,
       floor,
       room,
-      reportedBy: reportedByName || user.name // store the name of the person reported
+      reportedBy: user.id // Store user ID instead of name to match schema
     });
 
     await newRequest.save();
@@ -24,7 +31,7 @@ exports.createRequest = async (req, res) => {
   }
 };
 
-//  Get all maintenance requests (Manager / Super Manager)
+//  Get all maintenance requests (Manager / Sub Manager)
 exports.getRequests = async (req, res) => {
   const user = req.user;
 
@@ -46,14 +53,14 @@ exports.getRequests = async (req, res) => {
   }
 };
 
-//  Update maintenance request (Manager / Super Manager)
+//  Update maintenance request (Manager / Sub Manager)
 exports.updateRequest = async (req, res) => {
   const { requestId } = req.params;
   const { status, assignedToName } = req.body;
   const user = req.user;
 
-  // Only Manager or Super Manager can update
-  if (!["MANAGER", "SUPER_MANAGER"].includes(user.role)) {
+  // Only Manager or Sub Manager can update
+  if (!["MANAGER", "SUB_MANAGER"].includes(user.role)) {
     return res.status(403).json({ message: "Not authorized" });
   }
 
@@ -61,8 +68,24 @@ exports.updateRequest = async (req, res) => {
     const request = await Maintenance.findById(requestId);
     if (!request) return res.status(404).json({ message: "Request not found" });
 
-    if (status) request.status = status; // Update status
-    if (assignedToName) request.assignedTo = assignedToName; // Assign a person (stored only)
+    // Validate status if provided
+    if (status) {
+      const validStatuses = ["PENDING", "IN_PROGRESS", "COMPLETED"];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      request.status = status;
+    }
+    // assignedTo should be ObjectId, not name
+    if (assignedToName) {
+      // Try to find user by name or use as ObjectId if valid
+      const assignedUser = await User.findOne({ name: assignedToName });
+      if (assignedUser) {
+        request.assignedTo = assignedUser._id;
+      } else {
+        return res.status(404).json({ message: "Assigned user not found" });
+      }
+    }
 
     await request.save();
     res.json({ message: "Maintenance request updated", request });
