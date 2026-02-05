@@ -95,7 +95,7 @@ export const getRoomPayments = (params?: { status?: string; personId?: string; r
 export const createRoomPayment = (data: any) => 
   api.post(`${API_URL}/room-payments`, data).then(res => res.data);
 
-export const markRoomPaymentAsPaid = (paymentId: string, data: { paidAmount?: number; paymentMethod?: string; notes?: string }) => 
+export const markRoomPaymentAsPaid = (paymentId: string, data: { paidAmount?: number; paymentMethod?: string; notes?: string; buildingId?: string }) => 
   api.patch(`${API_URL}/room-payments/${paymentId}/paid`, data).then(res => res.data);
 
 export const getRoomPaymentStats = (buildingId?: string) => {
@@ -105,6 +105,11 @@ export const getRoomPaymentStats = (buildingId?: string) => {
 
 export const autoCreateRoomPayments = (buildingId?: string) => 
   api.post(`${API_URL}/room-payments/auto-create`, { buildingId }).then(res => res.data);
+
+export const deleteRoomPayment = (paymentId: string, buildingId?: string) => {
+  const params = buildingId ? { buildingId } : {};
+  return api.delete(`${API_URL}/room-payments/${paymentId}`, { params }).then(res => res.data);
+};
 
 // --- APARTMENT OPERATIONS ---
 export const getApartments = (buildingId?: string) => {

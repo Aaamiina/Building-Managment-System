@@ -63,6 +63,7 @@ router.patch("/building-approvals/:id/approve", auth, role("MANAGER"), buildingA
 router.get("/room-payments", auth, role("MANAGER","SUB_MANAGER"), paymentController.getRoomPayments);
 router.post("/room-payments", auth, role("MANAGER","SUB_MANAGER"), paymentController.createRoomPayment);
 router.patch("/room-payments/:paymentId/paid", auth, role("MANAGER","SUB_MANAGER"), paymentController.markPaymentAsPaid);
+router.delete("/room-payments/:paymentId", auth, role("MANAGER"), paymentController.deleteRoomPayment);
 router.get("/room-payments/stats", auth, role("MANAGER","SUB_MANAGER"), paymentController.getPaymentStats);
 router.post("/room-payments/auto-create", auth, role("MANAGER"), paymentController.autoCreatePayments);
 

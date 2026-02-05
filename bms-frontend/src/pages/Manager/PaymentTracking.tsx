@@ -18,6 +18,69 @@ import {
 
 const SYSTEM_BLUE = "#1E3A4C";
 
+// Helper function to aggregate child room payments into parent apartments
+const processApartmentPayments = (rooms: any[]) => {
+  if (!rooms || rooms.length === 0) return [];
+  
+  // Separate apartments and regular rooms
+  const apartments: any[] = [];
+  const regularRooms: any[] = [];
+  const childRoomsMap = new Map<string, any[]>(); // Map apartment ID to its child rooms
+  
+  rooms.forEach(room => {
+    const isApartment = room.isApartment || (room.type && room.type.toLowerCase().includes("apartment"));
+    
+    if (isApartment && !room.parentApartment) {
+      // This is a parent apartment
+      apartments.push(room);
+    } else if (room.parentApartment) {
+      // This is a child room inside an apartment
+      const parentId = room.parentApartment._id || room.parentApartment;
+      if (!childRoomsMap.has(parentId)) {
+        childRoomsMap.set(parentId, []);
+      }
+      childRoomsMap.get(parentId)!.push(room);
+    } else {
+      // Regular room (not apartment, not inside apartment)
+      regularRooms.push(room);
+    }
+  });
+  
+  // Process apartments with aggregated child room payments
+  const processedApartments = apartments.map(apt => {
+    const aptId = apt._id || apt.id;
+    const childRooms = childRoomsMap.get(aptId) || [];
+    
+    // Calculate total payment from child rooms
+    const childRoomsTotal = childRooms.reduce((sum, room) => {
+      return sum + (room.payment?.amount || 0);
+    }, 0);
+    
+    // Apartment's own payment
+    const apartmentPayment = apt.payment?.amount || 0;
+    
+    // Total = apartment's payment + all child rooms' payments
+    const totalPayment = apartmentPayment + childRoomsTotal;
+    
+    return {
+      ...apt,
+      childRoomsList: childRooms,
+      childRoomsCount: childRooms.length,
+      childRoomsTotal: childRoomsTotal,
+      totalPayment: totalPayment,
+      payment: {
+        ...apt.payment,
+        amount: totalPayment, // Override with total
+        originalAmount: apartmentPayment // Keep original apartment payment
+      },
+      isProcessedApartment: true
+    };
+  });
+  
+  // Return processed apartments + regular rooms (exclude child rooms from main list)
+  return [...processedApartments, ...regularRooms];
+};
+
 export function ManagerPaymentTracking() {
   // Room payment data (room overview)
   const [roomPayments, setRoomPayments] = useState<any[]>([]);
@@ -36,6 +99,8 @@ export function ManagerPaymentTracking() {
   const [activeTab, setActiveTab] = useState("all");
   const [viewMode, setViewMode] = useState<"rooms" | "tenants">("tenants");
   const [markPaidForm, setMarkPaidForm] = useState({ paidAmount: "", paymentMethod: "CASH", notes: "" });
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState<any>(null);
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
 
@@ -96,7 +161,10 @@ export function ManagerPaymentTracking() {
       console.log("Tenant Payments Data:", tenantPaymentsData);
       console.log("Tenant Payment Stats:", tenantStatsData);
 
-      setRoomPayments(roomPaymentsData || []);
+      // Process room payments to aggregate child rooms into parent apartments
+      const processedRoomPayments = processApartmentPayments(roomPaymentsData || []);
+      
+      setRoomPayments(processedRoomPayments);
       setPaymentStats(statsData);
       setTenantPayments(tenantPaymentsData || []);
       setTenantPaymentStats(tenantStatsData);
@@ -142,7 +210,8 @@ export function ManagerPaymentTracking() {
       const result = await managerApi.markRoomPaymentAsPaid(paymentToMark._id, {
         paidAmount: paidAmount,
         paymentMethod: markPaidForm.paymentMethod,
-        notes: markPaidForm.notes
+        notes: markPaidForm.notes,
+        buildingId: selectedBuildingId || undefined
       });
       
       if (result.message) {
@@ -193,6 +262,52 @@ export function ManagerPaymentTracking() {
     }
   };
 
+  const handleDeletePayment = (payment: any) => {
+    setPaymentToDelete(payment);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!paymentToDelete) return;
+    try {
+      await managerApi.deleteRoomPayment(paymentToDelete._id, selectedBuildingId || undefined);
+      toast.success("Payment record deleted successfully");
+      setDeleteConfirmOpen(false);
+      setPaymentToDelete(null);
+      fetchAllData(selectedBuildingId);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to delete payment record");
+    }
+  };
+
+  // Mark payment as fully paid (without showing modal)
+  const handleMarkFullyPaid = async (payment: any) => {
+    try {
+      const fullAmount = payment.status === "PARTIAL"
+        ? (payment.amount || 0) - (payment.paidAmount || 0)
+        : payment.amount || 0;
+      
+      const result = await managerApi.markRoomPaymentAsPaid(payment._id, {
+        paidAmount: fullAmount,
+        paymentMethod: "CASH",
+        notes: "Marked as fully paid",
+        buildingId: selectedBuildingId || undefined
+      });
+      
+      toast.success("Payment marked as paid!");
+      
+      // Refresh data
+      await fetchAllData(selectedBuildingId);
+      
+      // If fully paid and recurring, show info about next payment
+      if (result.status === "PAID" && payment.frequency !== "ONE_TIME") {
+        toast.info("Next payment period has been created");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to mark payment as paid");
+    }
+  };
+
   // Filter room payments
   const filteredRoomPayments = roomPayments.filter(r => {
     const matchesSearch = 
@@ -202,10 +317,14 @@ export function ManagerPaymentTracking() {
       r.floor?.floorNumber?.toString().includes(searchQuery);
     
     if (activeTab === "all") return matchesSearch;
-    if (activeTab === "apartments") return r.isApartment || r.paymentSource === "APARTMENT";
-    if (activeTab === "rooms") return !r.isApartment && r.paymentSource === "ROOM";
+    if (activeTab === "apartments") return r.isProcessedApartment || r.isApartment || r.paymentSource === "APARTMENT";
+    if (activeTab === "rooms") return !r.isProcessedApartment && !r.isApartment && r.paymentSource !== "APARTMENT";
     return matchesSearch;
   });
+  
+  // Calculate apartment stats
+  const apartmentCount = roomPayments.filter(r => r.isProcessedApartment || r.isApartment).length;
+  const regularRoomCount = roomPayments.filter(r => !r.isProcessedApartment && !r.isApartment).length;
 
   // Filter tenant payments
   const filteredTenantPayments = tenantPayments.filter(p => {
@@ -229,23 +348,28 @@ export function ManagerPaymentTracking() {
       header: "ROOM",
       render: (r: any) => (
         <div>
-          <div className="font-black text-[#1E3A4C]">{r.displayName || r.roomNumber}</div>
-          <div className="text-xs text-gray-500">{r.type}</div>
-          {r.isApartment && (
-            <div className="mt-2 space-y-1">
-              <div className="text-[10px] text-purple-600 font-bold">
-                Apartment: {r.childRooms || 0} / {r.capacity || r.childRooms || 0} rooms
+          <div className="flex items-center gap-2">
+            <div className="font-black text-[#1E3A4C] dark:text-white">{r.displayName || r.roomNumber}</div>
+            {r.isProcessedApartment && (
+              <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-[9px] font-bold">
+                APARTMENT
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">{r.type}</div>
+          {r.isProcessedApartment && r.childRoomsList && r.childRoomsList.length > 0 && (
+            <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-800">
+              <div className="text-[10px] text-purple-700 dark:text-purple-400 font-bold mb-1">
+                {r.childRoomsCount} Room{r.childRoomsCount !== 1 ? 's' : ''} Inside:
               </div>
-              {r.childRoomsList && r.childRoomsList.length > 0 && (
-                <div className="text-[9px] text-gray-500">
-                  Rooms: {r.childRoomsList.map((cr: any) => cr.roomNumber).join(", ")}
-                </div>
-              )}
-            </div>
-          )}
-          {r.parentApartment && !r.isApartment && (
-            <div className="text-[10px] text-blue-600 mt-1">
-              Part of: {r.parentApartment.roomNumber || r.parentApartment}
+              <div className="space-y-1">
+                {r.childRoomsList.map((cr: any, idx: number) => (
+                  <div key={idx} className="flex justify-between text-[9px]">
+                    <span className="text-gray-600 dark:text-gray-400">{cr.roomNumber} ({cr.type})</span>
+                    <span className="font-bold text-gray-700 dark:text-gray-300">${cr.payment?.amount || 0}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -254,7 +378,7 @@ export function ManagerPaymentTracking() {
     {
       header: "LOCATION",
       render: (r: any) => (
-        <div className="text-sm">
+        <div className="text-sm dark:text-gray-300">
           Level {r.floor?.floorNumber || "N/A"}
         </div>
       )
@@ -263,14 +387,21 @@ export function ManagerPaymentTracking() {
       header: "PAYMENT",
       render: (r: any) => (
         <div>
-          <div className="font-bold text-sm text-[#1E3A4C]">
+          <div className="font-black text-lg text-[#1E3A4C] dark:text-white">
             ${r.payment?.amount?.toLocaleString() || 0}
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             {r.payment?.frequency || "MONTHLY"}
           </div>
-          {r.paymentSource === "APARTMENT" && (
-            <div className="text-[10px] text-purple-600 mt-1">Apartment Level</div>
+          {r.isProcessedApartment && r.childRoomsCount > 0 && (
+            <div className="mt-1 text-[10px] space-y-0.5">
+              <div className="text-purple-600 dark:text-purple-400">
+                Apt: ${r.payment?.originalAmount?.toLocaleString() || 0}
+              </div>
+              <div className="text-blue-600 dark:text-blue-400">
+                Rooms: ${r.childRoomsTotal?.toLocaleString() || 0}
+              </div>
+            </div>
           )}
         </div>
       )
@@ -279,7 +410,9 @@ export function ManagerPaymentTracking() {
       header: "STATUS",
       render: (r: any) => (
         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
-          r.status === "OCCUPIED" ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"
+          r.status === "OCCUPIED" 
+            ? "bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400" 
+            : "bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400"
         }`}>
           {r.status || "AVAILABLE"}
         </span>
@@ -359,10 +492,10 @@ export function ManagerPaymentTracking() {
       header: "STATUS",
       render: (p: any) => {
         const statusColors = {
-          PAID: "bg-green-50 text-green-600",
-          PENDING: "bg-yellow-50 text-yellow-600",
-          OVERDUE: "bg-red-50 text-red-600",
-          PARTIAL: "bg-orange-50 text-orange-600"
+          PAID: "bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400",
+          PENDING: "bg-yellow-50 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400",
+          OVERDUE: "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400",
+          PARTIAL: "bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
         };
         const status = p.status === "PENDING" && new Date(p.dueDate) < new Date() ? "OVERDUE" : p.status;
         return (
@@ -371,6 +504,40 @@ export function ManagerPaymentTracking() {
           }`}>
             {status}
           </span>
+        );
+      }
+    },
+    {
+      header: "ACTIONS",
+      render: (p: any) => {
+        if (p.status === "PAID") {
+          return (
+            <span className="text-xs text-green-600 dark:text-green-400 font-bold">
+              ✓ Completed
+            </span>
+          );
+        }
+        return (
+          <div className="flex gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMarkFullyPaid(p);
+              }}
+              className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-bold transition-colors"
+            >
+              Paid
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMarkAsPaid(p);
+              }}
+              className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-colors"
+            >
+              Partial
+            </button>
+          </div>
         );
       }
     }
@@ -543,7 +710,7 @@ export function ManagerPaymentTracking() {
                     <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Apartments</span>
                     <BuildingOfficeIcon className="w-4 h-4 text-purple-500 dark:text-purple-400" />
                   </div>
-                  <div className="text-xl font-black text-purple-600 dark:text-purple-400">{combinedStats.apartmentCount}</div>
+                  <div className="text-xl font-black text-purple-600 dark:text-purple-400">{apartmentCount || combinedStats.apartmentCount}</div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total apartments in building</div>
                 </div>
                 <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700 shadow-sm">
@@ -649,7 +816,7 @@ export function ManagerPaymentTracking() {
                       : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                   }`}
                 >
-                  Apartments ({roomPayments.filter(r => r.isApartment || r.paymentSource === "APARTMENT").length})
+                  Apartments ({apartmentCount})
                 </button>
                 <button
                   onClick={() => setActiveTab("rooms")}
@@ -659,7 +826,7 @@ export function ManagerPaymentTracking() {
                       : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                   }`}
                 >
-                  Regular Rooms ({roomPayments.filter(r => !r.isApartment && r.paymentSource === "ROOM").length})
+                  Regular Rooms ({regularRoomCount})
                 </button>
               </>
             )}
@@ -699,11 +866,6 @@ export function ManagerPaymentTracking() {
               columns={viewMode === "tenants" ? tenantPaymentColumns : roomPaymentColumns}
               isLoading={isLoading}
               onRowClick={handleRowClick}
-              onEdit={viewMode === "tenants" ? (payment) => {
-                if (payment.status !== "PAID") {
-                  handleMarkAsPaid(payment);
-                }
-              } : undefined}
               emptyMessage={viewMode === "tenants" 
                 ? "No payment records match your search. Try adjusting your filters."
                 : "No room payments found."}
@@ -722,6 +884,38 @@ export function ManagerPaymentTracking() {
               handleMarkAsPaid(selectedPayment);
             } : undefined}
           />
+
+          {/* Delete Confirmation Modal */}
+          {deleteConfirmOpen && paymentToDelete && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70 backdrop-blur-sm">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+                <h2 className="text-xl font-black text-red-600 dark:text-red-400 mb-4">Delete Payment Record</h2>
+                <p className="text-gray-600 dark:text-gray-300 mb-4">
+                  Are you sure you want to delete this payment record?
+                </p>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 mb-6">
+                  <div className="font-bold text-gray-800 dark:text-gray-200">{paymentToDelete.person?.name}</div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    Room {paymentToDelete.room?.roomNumber} • {paymentToDelete.period} • ${paymentToDelete.amount}
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setDeleteConfirmOpen(false); setPaymentToDelete(null); }}
+                    className="flex-1 px-4 py-2.5 rounded-xl font-bold text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteConfirm}
+                    className="flex-1 px-4 py-2.5 rounded-xl font-bold text-sm bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600 transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Mark as Paid Modal */}
           {isMarkPaidModalOpen && paymentToMark && (

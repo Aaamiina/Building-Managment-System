@@ -301,8 +301,9 @@ exports.addRoom = async (req, res) => {
       return res.status(400).json({ message: "Floor not found or does not belong to selected building. Please select a floor from the current building." });
     }
 
-    // 4. Check allowed room types
-    if (building.allowedRoomTypes && building.allowedRoomTypes.length > 0) {
+    // 4. Check allowed room types (skip validation for rooms inside apartments)
+    const parentApartmentId = req.body.parentApartment || null;
+    if (!parentApartmentId && building.allowedRoomTypes && building.allowedRoomTypes.length > 0) {
       if (!building.allowedRoomTypes.includes(type)) {
         return res.status(400).json({ 
           message: `Room type "${type}" is not allowed. Allowed types: ${building.allowedRoomTypes.join(", ")}` 
@@ -313,7 +314,6 @@ exports.addRoom = async (req, res) => {
     // 5. Handle apartment structure
     // Use explicit isApartment from request, or check if type contains "apartment"
     const isApartment = req.body.isApartment === true || (type && type.toLowerCase().includes("apartment"));
-    const parentApartmentId = req.body.parentApartment || null;
     const paymentTracking = req.body.paymentTracking || "ROOM_LEVEL";
 
     // 6. Abuur qolka with payment and apartment logic

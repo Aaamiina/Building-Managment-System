@@ -216,12 +216,20 @@ exports.getManagerRoomPayments = async (req, res) => {
             roomPayments.push(roomData);
           }
         }
-      } else if (room.isApartment) {
+      } else if (room.isApartment || (room.type && room.type.toLowerCase().includes("apartment"))) {
         // This is an apartment (parent) - always show it
+        // Check both isApartment flag AND type containing "apartment"
         const childRooms = allRooms.filter(r => 
           r.parentApartment && r.parentApartment._id.toString() === room._id.toString()
         );
+        
+        // Calculate total payment including child rooms
+        const childRoomsTotal = childRooms.reduce((sum, cr) => sum + (cr.payment?.amount || 0), 0);
+        const apartmentPayment = room.payment?.amount || 0;
+        const totalPayment = apartmentPayment + childRoomsTotal;
+        
         roomData.paymentSource = "APARTMENT";
+        roomData.isApartment = true; // Ensure this is set
         roomData.childRooms = childRooms.length;
         roomData.childRoomsList = childRooms.map((cr) => ({
           roomNumber: cr.roomNumber,
@@ -229,8 +237,13 @@ exports.getManagerRoomPayments = async (req, res) => {
           status: cr.status,
           payment: cr.payment
         }));
+        roomData.childRoomsTotal = childRoomsTotal;
         roomData.displayName = `Apartment ${room.roomNumber}`;
-        roomData.payment = room.payment || { amount: 0, frequency: "MONTHLY", currency: "USD" };
+        roomData.payment = {
+          ...(room.payment || { frequency: "MONTHLY", currency: "USD" }),
+          amount: totalPayment, // Total including child rooms
+          originalAmount: apartmentPayment // Original apartment-only amount
+        };
         roomData.capacity = room.capacity || childRooms.length; // Show capacity or actual room count
         roomPayments.push(roomData);
         processedApartmentIds.add(room._id.toString());

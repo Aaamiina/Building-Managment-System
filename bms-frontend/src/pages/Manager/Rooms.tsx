@@ -50,11 +50,12 @@ export function ManageRooms() {
         api.getRooms(false, buildingId || undefined), 
         api.getFloors(buildingId || undefined)
       ]);
-      // Filter out apartments - they are managed in the Apartments page
-      const nonApartmentRooms = (Array.isArray(rRes) ? rRes : []).filter((r: any) => 
-        !r.isApartment && !(r.type && r.type.toLowerCase().includes("apartment"))
+      // Filter out only child rooms inside apartments - they are managed in the Apartments page
+      // Keep regular rooms AND parent apartments visible
+      const mainRooms = (Array.isArray(rRes) ? rRes : []).filter((r: any) => 
+        !r.parentApartment // Only exclude child rooms inside apartments
       );
-      setRooms(nonApartmentRooms);
+      setRooms(mainRooms);
       setFloors(Array.isArray(fRes) ? fRes : []);
     } catch (err) {
       toast.error("Failed to load room data");

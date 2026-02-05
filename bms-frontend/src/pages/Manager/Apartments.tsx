@@ -72,7 +72,7 @@ export function ManageApartments() {
 
   useEffect(() => {
     // Get selected building ID from localStorage on mount
-    const savedBuildingId = localStorage.getItem("currentBuildingId");
+    const savedBuildingId = localStorage.getItem("selectedBuildingId");
     setCurrentBuildingId(savedBuildingId);
     if (savedBuildingId) {
       loadData(savedBuildingId);
@@ -84,7 +84,7 @@ export function ManageApartments() {
   useEffect(() => {
     // Listen for building changes
     const handleBuildingChange = (event: any) => {
-      const buildingId = event.detail?.buildingId || localStorage.getItem("currentBuildingId");
+      const buildingId = event.detail?.buildingId || localStorage.getItem("selectedBuildingId");
       setCurrentBuildingId(buildingId);
       if (buildingId) {
         loadData(buildingId);

@@ -219,17 +219,18 @@ exports.createRoomPayment = async (req, res) => {
 exports.markPaymentAsPaid = async (req, res) => {
   try {
     const { paymentId } = req.params;
-    const { paidAmount, paymentMethod, notes } = req.body;
+    const { paidAmount, paymentMethod, notes, buildingId } = req.body;
 
     const payment = await RoomPayment.findById(paymentId);
     if (!payment) {
       return res.status(404).json({ message: "Payment not found" });
     }
 
-    // Verify building access
-    const building = await getBuildingForUser(req.user);
+    // Verify building access - use buildingId from body or query, or fall back to payment's building
+    const targetBuildingId = buildingId || req.query.buildingId || payment.building;
+    const building = await getBuildingForUser(req.user, targetBuildingId);
     if (!building || payment.building.toString() !== building._id.toString()) {
-      return res.status(403).json({ message: "Unauthorized" });
+      return res.status(403).json({ message: "Unauthorized - payment does not belong to your building" });
     }
 
     // Validate paid amount
@@ -458,5 +459,39 @@ exports.autoCreatePayments = async (req, res) => {
   } catch (err) {
     console.error("Auto-create payments error:", err);
     res.status(500).json({ message: "Error creating payment records", error: err.message });
+  }
+};
+
+// Delete a room payment record
+exports.deleteRoomPayment = async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const { buildingId } = req.query;
+    
+    const building = await getBuildingForUser(req.user, buildingId);
+    if (!building) return res.status(404).json({ message: "Building not found" });
+
+    // Find the payment and verify it belongs to this building
+    const payment = await RoomPayment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({ message: "Payment record not found" });
+    }
+
+    // Verify the payment belongs to this manager's building
+    if (payment.building.toString() !== building._id.toString()) {
+      return res.status(403).json({ message: "Not authorized to delete this payment" });
+    }
+
+    // Only allow deleting PENDING payments (not PAID ones)
+    if (payment.status === "PAID") {
+      return res.status(400).json({ message: "Cannot delete a paid payment record. Only pending payments can be deleted." });
+    }
+
+    await RoomPayment.findByIdAndDelete(paymentId);
+    
+    res.json({ message: "Payment record deleted successfully" });
+  } catch (err) {
+    console.error("Delete room payment error:", err);
+    res.status(500).json({ message: "Error deleting payment record", error: err.message });
   }
 };
