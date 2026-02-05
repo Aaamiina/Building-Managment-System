@@ -1,5 +1,5 @@
 // src/api/buildingApi.ts
-import axios from "axios";
+import { api } from "./client";
 
 export interface Building {
   _id: string;
@@ -18,7 +18,7 @@ export interface BuildingStats {
 }
 
 export const getBuildings = async (): Promise<Building[]> => {
-  const response = await axios.get("/api/buildings");
+  const response = await api.get("/api/buildings");
   return response.data;
 };
 
@@ -29,11 +29,11 @@ export const createBuilding = async (data: {
   totalFloors: number;
   managerId: string;
 }) => {
-  const response = await axios.post("/api/buildings", data);
+  const response = await api.post("/api/buildings", data);
   return response.data;
 };
 
 export const getBuildingStats = async (buildingId: string): Promise<BuildingStats> => {
-  const response = await axios.get(`/api/buildings/${buildingId}/stats`);
+  const response = await api.get(`/api/buildings/${buildingId}/stats`);
   return response.data;
 };

@@ -1,34 +1,65 @@
-// src/components/DeleteConfirmModal.tsx
-import { TrashIcon } from "@heroicons/react/24/outline";
+import React from "react";
+import { ExclamationTriangleIcon, XMarkIcon } from "@heroicons/react/24/outline";
 
-export function DeleteConfirmModal({ isOpen, onClose, onConfirm, itemName }: any) {
+interface DeleteConfirmModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  itemName?: string;
+}
+
+const SYSTEM_COLOR = "#1E3A4C";
+
+export function DeleteConfirmModal({ isOpen, onClose, onConfirm, title, message, itemName }: DeleteConfirmModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
-        <div className="p-8 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 mb-4">
-            <TrashIcon className="h-8 w-8 text-red-600" aria-hidden="true" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 animate-in zoom-in-95 duration-200">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <ExclamationTriangleIcon className="w-6 h-6 text-red-600" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-800">{title}</h2>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <XMarkIcon className="w-5 h-5 text-slate-600" />
+            </button>
           </div>
-          <h3 className="text-xl font-bold text-[#1E3A4C]">Delete {itemName}?</h3>
-          <p className="text-sm text-gray-500 mt-2">
-            Are you sure you want to remove this? This action cannot be undone and will permanently delete the data.
+
+          <p className="text-slate-600 mb-6">
+            {message}
+            {itemName && (
+              <span className="font-bold text-slate-800"> "{itemName}"</span>
+            )}
+            ? This action cannot be undone.
           </p>
-        </div>
-        <div className="flex border-t border-gray-100">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-4 text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 px-4 py-4 text-sm font-bold text-white bg-[#1E3A4C] hover:bg-[#1E3A4C] transition-colors"
-          >
-            Yes, Delete
-          </button>
+
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onClose}
+              className="px-6 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                onConfirm();
+                onClose();
+              }}
+              style={{ backgroundColor: SYSTEM_COLOR }}
+              className="px-6 py-2.5 text-white rounded-xl font-bold text-sm hover:opacity-90 transition-all shadow-lg"
+            >
+              Delete
+            </button>
+          </div>
         </div>
       </div>
     </div>

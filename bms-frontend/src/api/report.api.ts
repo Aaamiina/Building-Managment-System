@@ -1,5 +1,5 @@
 // src/api/api.ts
-import axios from 'axios';
+import { api as axiosInstance } from './client';
 
 // --- INTERFACES ---
 
@@ -63,37 +63,30 @@ export interface MaintenanceStats {
   };
 }
 
-// --- API CONFIGURATION ---
-
-const getAuthHeaders = () => ({
-  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-});
-
 // --- API OBJECT ---
 
 export const api = {
   // 1. Admin Global Report
   getAdminReport: async (): Promise<AdminReport> => {
-    const res = await axios.get<AdminReport>('/api/reports/admin', getAuthHeaders());
+    const res = await axiosInstance.get<AdminReport>('/api/reports/admin');
     return res.data;
   },
 
   // 2. Announcements / News Feed
   getLatestNews: async (): Promise<NewsItem[]> => {
-    const res = await axios.get<NewsItem[]>('/api/auth/news', getAuthHeaders());
+    const res = await axiosInstance.get<NewsItem[]>('/api/auth/news');
     return res.data;
   },
 
   // 3. Buildings List
   getBuildings: async (): Promise<Building[]> => {
-    const res = await axios.get<Building[]>('/api/buildings', getAuthHeaders());
+    const res = await axiosInstance.get<Building[]>('/api/buildings');
     return res.data;
   },
 
   // 4. General Stats (Used by Manager or Admin)
   getDashboardStats: async (buildingId?: string): Promise<DashboardStats> => {
-    const res = await axios.get<DashboardStats>('/api/dashboard/stats', {
-      ...getAuthHeaders(),
+    const res = await axiosInstance.get<DashboardStats>('/api/dashboard/stats', {
       params: buildingId ? { buildingId } : {},
     });
     return res.data;
@@ -101,8 +94,7 @@ export const api = {
 
   // 5. Occupancy Visuals
   getOccupancyTrends: async (buildingId?: string): Promise<OccupancyTrend[]> => {
-    const res = await axios.get<OccupancyTrend[]>('/api/dashboard/occupancy-trends', {
-      ...getAuthHeaders(),
+    const res = await axiosInstance.get<OccupancyTrend[]>('/api/dashboard/occupancy-trends', {
       params: buildingId ? { buildingId } : {},
     });
     return res.data;

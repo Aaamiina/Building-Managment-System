@@ -7,6 +7,8 @@ export function SignOutButton() {
     // Remove token or auth info from localStorage
     localStorage.removeItem("token"); // adjust key if different
     localStorage.removeItem("user"); // optional: remove user info
+    // Dispatch event to notify ThemeContext of user change
+    window.dispatchEvent(new Event('userChanged'));
     // Redirect to login page
     navigate("/login");
   };

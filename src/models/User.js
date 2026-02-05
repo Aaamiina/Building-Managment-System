@@ -27,6 +27,26 @@ const userSchema = new mongoose.Schema({
     required: true
   },
 
+  phone: {
+    type: String,
+    trim: true
+  },
+
+  buildingLogo: {
+    type: String,
+    default: ""
+  },
+
+  paymentDetails: {
+    type: Object, 
+    default: {}
+  },
+
+  sections: {
+    type: [String],
+    default: []
+  },
+
   building: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Building",
@@ -35,6 +55,11 @@ const userSchema = new mongoose.Schema({
   parentManager: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
+  },
+
+  adminPerson: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "AdminPerson"
   }
 
 }, { timestamps: true });

@@ -6,6 +6,14 @@ const buildingSchema = new mongoose.Schema(
       type: String,
       required: true
     },
+    brandingName: {
+      type: String,
+      default: ""
+    },
+    brandingLogo: {
+      type: String,
+      default: ""
+    },
     location: {
       type: String,
       required: true
@@ -18,8 +26,16 @@ const buildingSchema = new mongoose.Schema(
     // Approval policy for critical actions
     approvalPolicy: {
       type: String,
-      enum: ["MANAGER_ONLY", "MANAGER_AND_SUPERADMIN"],
+      enum: ["MANAGER_ONLY", "MANAGER_AND_SUB", "BOTH"],
       default: "MANAGER_ONLY"
+    },
+    floorLimit: {
+      type: Number,
+      default: 0
+    },
+    allowedRoomTypes: {
+      type: [String],
+      default: []
     }
   },
   {

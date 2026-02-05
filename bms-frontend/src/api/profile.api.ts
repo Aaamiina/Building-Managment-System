@@ -1,5 +1,5 @@
-// src/api/api.ts
-import axios from 'axios';
+// src/api/profile.api.ts
+import { api as axiosInstance } from './client';
 
 export interface UserProfile {
   _id: string;
@@ -23,17 +23,17 @@ export interface Building {
 
 export const api = {
   getCurrentUser: async (): Promise<User> => {
-    const res = await axios.get<User>('/api/users/me');
+    const res = await axiosInstance.get<User>('/api/users/me');
     return res.data;
   },
 
   updateUserProfile: async (profileId: string, data: Partial<UserProfile>) => {
-    const res = await axios.put<UserProfile>(`/api/users/${profileId}`, data);
+    const res = await axiosInstance.put<UserProfile>(`/api/users/${profileId}`, data);
     return res.data;
   },
 
   getBuildings: async (): Promise<Building[]> => {
-    const res = await axios.get<Building[]>('/api/buildings');
+    const res = await axiosInstance.get<Building[]>('/api/buildings');
     return res.data;
   },
 };

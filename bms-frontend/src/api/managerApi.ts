@@ -1,5 +1,5 @@
 // src/api/managerApi.ts
-import axios from "axios";
+import { api } from "./client";
 
 export interface Manager {
   _id: string;
@@ -11,6 +11,6 @@ export interface Manager {
 }
 
 export const getManagers = async (): Promise<Manager[]> => {
-  const response = await axios.get("/api/users?role=manager");
+  const response = await api.get("/api/users?role=manager");
   return response.data;
 };

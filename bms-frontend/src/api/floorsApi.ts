@@ -1,5 +1,5 @@
 // src/api/floorsApi.ts
-import axios from "axios";
+import { api } from "./client";
 
 export interface Floor {
   _id: string;
@@ -17,12 +17,12 @@ export interface Building {
 }
 
 export const getFloors = async (buildingId: string): Promise<Floor[]> => {
-  const res = await axios.get(`/api/floors?buildingId=${buildingId}`);
+  const res = await api.get(`/api/floors?buildingId=${buildingId}`);
   return res.data;
 };
 
 export const getBuildings = async (): Promise<Building[]> => {
-  const res = await axios.get("/api/buildings");
+  const res = await api.get("/api/buildings");
   return res.data;
 };
 
@@ -33,7 +33,7 @@ export const createFloor = async (data: {
   totalRooms: number;
   description?: string;
 }) => {
-  const res = await axios.post("/api/floors", data);
+  const res = await api.post("/api/floors", data);
   return res.data;
 };
 
@@ -43,6 +43,6 @@ export const updateFloor = async (floorId: string, data: {
   totalRooms: number;
   description?: string;
 }) => {
-  const res = await axios.put(`/api/floors/${floorId}`, data);
+  const res = await api.put(`/api/floors/${floorId}`, data);
   return res.data;
 };

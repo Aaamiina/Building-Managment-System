@@ -16,7 +16,7 @@ const role = require("../middleware/role");
 router.get(
   "/admin",
   auth,
-  role("ADMIN", "SUPER_MANAGER"),
+  role("SUPER_ADMIN"),
   getAdminGlobalReport
 );
 

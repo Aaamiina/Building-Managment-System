@@ -1,85 +1,126 @@
-import axios from "axios";
+import { api } from "./client";
 
-const API_URL = "http://localhost:5000/api/manager";
-
-// --- AUTH HELPER ---
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return {
-    headers: { Authorization: `Bearer ${token}` },
-  };
-};
+const API_URL = "/api/manager";
 
 // --- PROFILE & AUTH ---
 export const getProfile = async () => {
-  const response = await axios.get(`${API_URL}/auth/me`, getAuthHeaders());
+  const response = await api.get(`${API_URL}/auth/me`);
   return response.data;
 };
 
 export const updatePassword = async (passwords: any) => {
-  return await axios.put(`${API_URL}/auth/update-password`, passwords, getAuthHeaders());
+  return await api.put(`${API_URL}/auth/update-password`, passwords);
 };
 
 // --- SUB-MANAGER MANAGEMENT ---
-export const getSubManagers = () => 
-  axios.get(`${API_URL}/sub-managers`, getAuthHeaders()).then(res => res.data);
+export const getSubManagers = (buildingId?: string) => {
+  const params = buildingId ? { buildingId } : {};
+  return api.get(`${API_URL}/sub-managers`, { params }).then(res => res.data);
+};
 
 export const createSubManager = (data: any) => 
-  axios.post(`${API_URL}/create-sub-manager`, data, getAuthHeaders()).then(res => res.data);
+  api.post(`${API_URL}/create-sub-manager`, data).then(res => res.data);
 
 export const updateSubManager = (id: string, data: any) => 
-  axios.patch(`${API_URL}/Update-sub-managers/${id}`, data, getAuthHeaders()).then(res => res.data);
+  api.patch(`${API_URL}/Update-sub-managers/${id}`, data).then(res => res.data);
 
 export const deleteSubManager = (id: string) => 
-  axios.delete(`${API_URL}/delete-sub-managers/${id}`, getAuthHeaders()).then(res => res.data);
+  api.delete(`${API_URL}/delete-sub-managers/${id}`).then(res => res.data);
 
 // --- FLOOR OPERATIONS ---
-export const getFloors = () => 
-  axios.get(`${API_URL}/floors`, getAuthHeaders()).then(res => res.data);
+export const getFloors = (buildingId?: string) => {
+  const params = buildingId ? { buildingId } : {};
+  return api.get(`${API_URL}/floors`, { params }).then(res => res.data);
+};
 
 export const addFloor = (data: any) => 
-  axios.post(`${API_URL}/add-floor`, data, getAuthHeaders()).then(res => res.data);
+  api.post(`${API_URL}/add-floor`, data).then(res => res.data);
 
 export const updateFloor = (id: string, data: any) => 
-  axios.patch(`${API_URL}/update-floor/${id}`, data, getAuthHeaders()).then(res => res.data);
+  api.patch(`${API_URL}/update-floor/${id}`, data).then(res => res.data);
 
 export const deleteFloor = (id: string) => 
-  axios.delete(`${API_URL}/delete-floor/${id}`, getAuthHeaders()).then(res => res.data);
+  api.delete(`${API_URL}/delete-floor/${id}`).then(res => res.data);
 
 // --- ROOM OPERATIONS ---
-export const getRooms = async (availableOnly: boolean = false) => {
-  const response = await axios.get(`${API_URL}/rooms`, {
-    params: { availableOnly },
-    ...getAuthHeaders() 
-  });
+export const getRooms = async (availableOnly: boolean = false, buildingId?: string) => {
+  const params: any = { availableOnly };
+  if (buildingId) params.buildingId = buildingId;
+  const response = await api.get(`${API_URL}/rooms`, { params });
   return response.data;
 };
 
 export const addRoom = (data: any) => 
-  axios.post(`${API_URL}/add-room`, data, getAuthHeaders()).then(res => res.data);
+  api.post(`${API_URL}/add-room`, data).then(res => res.data);
 
 export const updateRoom = (id: string, data: any) => 
-  axios.patch(`${API_URL}/update-room/${id}`, data, getAuthHeaders()).then(res => res.data);
+  api.patch(`${API_URL}/update-room/${id}`, data).then(res => res.data);
 
 export const deleteRoom = (id: string) => 
-  axios.delete(`${API_URL}/delete-room/${id}`, getAuthHeaders()).then(res => res.data);
+  api.delete(`${API_URL}/delete-room/${id}`).then(res => res.data);
 
 // --- PERSON OPERATIONS ---
-export const getPeople = () => 
-  axios.get(`${API_URL}/people`, getAuthHeaders()).then(res => res.data);
+export const getPeople = (buildingId?: string) => {
+  const params = buildingId ? { buildingId } : {};
+  return api.get(`${API_URL}/people`, { params }).then(res => res.data);
+};
 
 export const assignPerson = (data: any) => 
-  axios.post(`${API_URL}/assign-person`, data, getAuthHeaders()).then(res => res.data);
+  api.post(`${API_URL}/assign-person`, data).then(res => res.data);
 
 export const updatePerson = (id: string, data: any) => 
-  axios.patch(`${API_URL}/update-person/${id}`, data, getAuthHeaders()).then(res => res.data);
+  api.patch(`${API_URL}/update-person/${id}`, data).then(res => res.data);
 
 export const deletePerson = (id: string) => 
-  axios.delete(`${API_URL}/delete-person/${id}`, getAuthHeaders()).then(res => res.data);
+  api.delete(`${API_URL}/delete-person/${id}`).then(res => res.data);
 
 // --- APPROVAL OPERATIONS ---
 export const getPendingRequests = () => 
-  axios.get(`${API_URL}/approvals/pending`, getAuthHeaders()).then(res => res.data);
+  api.get(`${API_URL}/approvals/pending`).then(res => res.data);
 
 export const reviewRequest = (id: string, status: 'APPROVED' | 'REJECTED', reason?: string) => 
-  axios.patch(`${API_URL}/approvals/${id}`, { status, reason }, getAuthHeaders()).then(res => res.data);
+  api.patch(`${API_URL}/approvals/${id}`, { status, reason }).then(res => res.data);
+
+// --- BUILDING APPROVAL OPERATIONS (for Manager) ---
+export const getManagerBuildingApprovals = () => 
+  api.get(`${API_URL}/building-approvals`).then(res => res.data);
+
+export const approveBuildingCreation = (id: string, status: "APPROVED" | "REJECTED", reason?: string) => 
+  api.patch(`${API_URL}/building-approvals/${id}/approve`, { status, reason }).then(res => res.data);
+
+// --- ROOM PAYMENT OPERATIONS (for tenant payments) ---
+export const getRoomPayments = (params?: { status?: string; personId?: string; roomId?: string; period?: string; buildingId?: string }) => 
+  api.get(`${API_URL}/room-payments`, { params }).then(res => res.data);
+
+export const createRoomPayment = (data: any) => 
+  api.post(`${API_URL}/room-payments`, data).then(res => res.data);
+
+export const markRoomPaymentAsPaid = (paymentId: string, data: { paidAmount?: number; paymentMethod?: string; notes?: string }) => 
+  api.patch(`${API_URL}/room-payments/${paymentId}/paid`, data).then(res => res.data);
+
+export const getRoomPaymentStats = (buildingId?: string) => {
+  const params = buildingId ? { buildingId } : {};
+  return api.get(`${API_URL}/room-payments/stats`, { params }).then(res => res.data);
+};
+
+export const autoCreateRoomPayments = (buildingId?: string) => 
+  api.post(`${API_URL}/room-payments/auto-create`, { buildingId }).then(res => res.data);
+
+// --- APARTMENT OPERATIONS ---
+export const getApartments = (buildingId?: string) => {
+  const params: any = { isApartment: true };
+  if (buildingId) params.buildingId = buildingId;
+  return api.get(`${API_URL}/rooms`, { params }).then(res => res.data);
+};
+
+export const addApartment = (data: any) => 
+  api.post(`${API_URL}/add-room`, { ...data, isApartment: true }).then(res => res.data);
+
+export const getApartmentRooms = (apartmentId: string, buildingId?: string) => {
+  const params: any = { parentApartment: apartmentId };
+  if (buildingId) params.buildingId = buildingId;
+  return api.get(`${API_URL}/rooms`, { params }).then(res => res.data);
+};
+
+export const addRoomToApartment = (apartmentId: string, data: any) => 
+  api.post(`${API_URL}/add-room`, { ...data, parentApartment: apartmentId, isApartment: false }).then(res => res.data);

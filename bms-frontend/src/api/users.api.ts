@@ -24,27 +24,27 @@ export interface Building {
 
 export const api = {
   getCurrentUser: async (): Promise<User> => {
-    const res = await axios.get<User>('/api/users/me');
+    const res = await axiosInstance.get<User>('/api/users/me');
     return res.data;
   },
 
   getUsers: async (role?: string): Promise<User[]> => {
-    const res = await axios.get<User[]>('/api/users', { params: role ? { role } : {} });
+    const res = await axiosInstance.get<User[]>('/api/users', { params: role ? { role } : {} });
     return res.data;
   },
 
   createUserProfile: async (data: Partial<UserProfile> & { userId: string }) => {
-    const res = await axios.post<UserProfile>('/api/users/profile', data);
+    const res = await axiosInstance.post<UserProfile>('/api/users/profile', data);
     return res.data;
   },
 
   updateUserProfile: async (profileId: string, data: Partial<UserProfile>) => {
-    const res = await axios.put<UserProfile>(`/api/users/profile/${profileId}`, data);
+    const res = await axiosInstance.put<UserProfile>(`/api/users/profile/${profileId}`, data);
     return res.data;
   },
 
   getBuildings: async (): Promise<Building[]> => {
-    const res = await axios.get<Building[]>('/api/buildings');
+    const res = await axiosInstance.get<Building[]>('/api/buildings');
     return res.data;
   },
 };

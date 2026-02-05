@@ -1,115 +1,92 @@
-const Maintenance = require("../models/Maintenance");
-const Building = require("../models/Building");
-const User = require("../models/User");
+/**
+ * Maintenance Controller - Handles HTTP requests for maintenance operations
+ * Delegates business logic to MaintenanceService
+ */
 
-// Create a maintenance request (Manager / Sub Manager)
+const maintenanceService = require("../services/maintenance.service");
+const { successResponse, errorResponse } = require("../utils/responseHandler");
+
+/**
+ * Create a maintenance request
+ */
 exports.createRequest = async (req, res) => {
-  const { title, description, building, floor, room, reportedByName } = req.body;
-  const user = req.user; // Manager or Sub Manager creating the request
-
   try {
-    // Use user's building if not provided in request
-    const buildingId = building || user.building;
-    if (!buildingId) {
-      return res.status(400).json({ message: "Building is required" });
-    }
-
-    const newRequest = new Maintenance({
-      title,
-      description,
-      building: buildingId,
-      floor,
-      room,
-      reportedBy: user.id // Store user ID instead of name to match schema
-    });
-
-    await newRequest.save();
-    res.status(201).json({ message: "Maintenance request created", request: newRequest });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    const request = await maintenanceService.createMaintenanceRequest(req.body, req.user);
+    return successResponse(res, request, "Maintenance request created successfully", 201);
+  } catch (error) {
+    return errorResponse(res, error);
   }
 };
 
-//  Get all maintenance requests (Manager / Sub Manager)
+/**
+ * Get all maintenance requests
+ */
 exports.getRequests = async (req, res) => {
-  const user = req.user;
-
   try {
-    // Only show requests for the manager's building
-    const query = { building: user.building };
-
-    const requests = await Maintenance.find(query)
-      .populate("assignedTo", "name") // assigned staff info if stored
-      .populate("building", "name")
-      .populate("floor", "floorNumber")
-      .populate("room", "roomNumber type")
-      .sort({ createdAt: -1 });
-
-    res.json(requests);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    const filters = {
+      status: req.query.status,
+      priority: req.query.priority,
+      building: req.query.building
+    };
+    const requests = await maintenanceService.getMaintenanceRequests(filters, req.user);
+    return successResponse(res, requests, "Maintenance requests retrieved successfully");
+  } catch (error) {
+    return errorResponse(res, error);
   }
 };
 
-//  Update maintenance request (Manager / Sub Manager)
-exports.updateRequest = async (req, res) => {
-  const { requestId } = req.params;
-  const { status, assignedToName } = req.body;
-  const user = req.user;
-
-  // Only Manager or Sub Manager can update
-  if (!["MANAGER", "SUB_MANAGER"].includes(user.role)) {
-    return res.status(403).json({ message: "Not authorized" });
-  }
-
-  try {
-    const request = await Maintenance.findById(requestId);
-    if (!request) return res.status(404).json({ message: "Request not found" });
-
-    // Validate status if provided
-    if (status) {
-      const validStatuses = ["PENDING", "IN_PROGRESS", "COMPLETED"];
-      if (!validStatuses.includes(status)) {
-        return res.status(400).json({ message: "Invalid status" });
-      }
-      request.status = status;
-    }
-    // assignedTo should be ObjectId, not name
-    if (assignedToName) {
-      // Try to find user by name or use as ObjectId if valid
-      const assignedUser = await User.findOne({ name: assignedToName });
-      if (assignedUser) {
-        request.assignedTo = assignedUser._id;
-      } else {
-        return res.status(404).json({ message: "Assigned user not found" });
-      }
-    }
-
-    await request.save();
-    res.json({ message: "Maintenance request updated", request });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-//  Get a single maintenance request by ID
+/**
+ * Get a single maintenance request by ID
+ */
 exports.getRequestById = async (req, res) => {
-  const { requestId } = req.params;
-
   try {
-    const request = await Maintenance.findById(requestId)
-      .populate("building", "name")
-      .populate("floor", "floorNumber")
-      .populate("room", "roomNumber type");
+    const request = await maintenanceService.getMaintenanceRequestById(req.params.requestId);
+    return successResponse(res, request, "Maintenance request retrieved successfully");
+  } catch (error) {
+    return errorResponse(res, error);
+  }
+};
 
-    if (!request) return res.status(404).json({ message: "Request not found" });
+/**
+ * Update maintenance request
+ */
+exports.updateRequest = async (req, res) => {
+  try {
+    const request = await maintenanceService.updateMaintenanceRequest(
+      req.params.requestId,
+      req.body,
+      req.user
+    );
+    return successResponse(res, request, "Maintenance request updated successfully");
+  } catch (error) {
+    return errorResponse(res, error);
+  }
+};
 
-    res.json(request);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+/**
+ * Assign maintenance request to user
+ */
+exports.assignRequest = async (req, res) => {
+  try {
+    const request = await maintenanceService.assignMaintenance(
+      req.params.requestId,
+      req.body.userId,
+      req.user
+    );
+    return successResponse(res, request, "Maintenance request assigned successfully");
+  } catch (error) {
+    return errorResponse(res, error);
+  }
+};
+
+/**
+ * Delete maintenance request
+ */
+exports.deleteRequest = async (req, res) => {
+  try {
+    await maintenanceService.deleteMaintenanceRequest(req.params.requestId, req.user);
+    return successResponse(res, null, "Maintenance request deleted successfully");
+  } catch (error) {
+    return errorResponse(res, error);
   }
 };

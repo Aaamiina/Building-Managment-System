@@ -1,4 +1,4 @@
-import axios from "axios";
+import { api } from "./client";
 
 export interface DashboardStats {
   totalBuildings: number;
@@ -39,7 +39,7 @@ export interface OccupancyTrends {
 }
 
 export const getDashboardStats = async (): Promise<DashboardStats> => {
-  const res = await axios.get("/api/dashboard/stats");
+  const res = await api.get("/api/dashboard/stats");
   const data: DashboardStats = res.data;
 
   // Ensure defaults so frontend never crashes
@@ -64,7 +64,7 @@ export const getDashboardStats = async (): Promise<DashboardStats> => {
 };
 
 export const getMaintenanceStats = async (): Promise<MaintenanceStats> => {
-  const res = await axios.get("/api/dashboard/maintenance-stats");
+  const res = await api.get("/api/dashboard/maintenance-stats");
   const data: MaintenanceStats = res.data;
 
   return {
@@ -83,7 +83,7 @@ export const getMaintenanceStats = async (): Promise<MaintenanceStats> => {
 };
 
 export const getOccupancyTrends = async (): Promise<OccupancyTrends> => {
-  const res = await axios.get("/api/dashboard/occupancy-trends");
+  const res = await api.get("/api/dashboard/occupancy-trends");
   const data: OccupancyTrends = res.data;
 
   return {

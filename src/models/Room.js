@@ -20,6 +20,21 @@ const roomSchema = new mongoose.Schema({
     enum: ["AVAILABLE", "OCCUPIED", "MAINTENANCE", "UNAVAILABLE"],
     default: "AVAILABLE"
   },
+  payment: {
+    amount: {
+      type: Number,
+      default: 0
+    },
+    frequency: {
+      type: String,
+      enum: ["MONTHLY", "QUARTERLY", "YEARLY", "ONE_TIME"],
+      default: "MONTHLY"
+    },
+    currency: {
+      type: String,
+      default: "USD"
+    }
+  },
   floor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Floor",
@@ -28,6 +43,22 @@ const roomSchema = new mongoose.Schema({
   building: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Building"
+  },
+  // For apartment structure: parent apartment can have child rooms
+  parentApartment: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Room", // Self-reference for apartment hierarchy
+    default: null
+  },
+  isApartment: {
+    type: Boolean,
+    default: false
+  },
+  // For tracking individual room payments within an apartment
+  paymentTracking: {
+    type: String,
+    enum: ["APARTMENT_LEVEL", "ROOM_LEVEL"],
+    default: "ROOM_LEVEL" // Default: each room has its own payment
   }
 }, { timestamps: true });
 

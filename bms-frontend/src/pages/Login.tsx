@@ -133,16 +133,59 @@
 
 
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginRequest } from "../api/auth.api"; 
 import { toast } from "sonner";
-import { EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
+import { EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
 
 export function Login() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [bgImageUrl, setBgImageUrl] = useState("/assets/images/login-bg.jpg");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  // Try to load the background image and logo
+  useEffect(() => {
+    // Load background image
+    const img = new Image();
+    img.onload = () => {
+      setBgImageUrl("/assets/images/login-bg.jpg");
+    };
+    img.onerror = () => {
+      setBgImageUrl(""); // Will show gradient only
+    };
+    img.src = "/assets/images/login-bg.jpg";
+
+    // Try to load logo with multiple possible names
+    const logoNames = [
+      "sky-property-logo.png",
+      "sky-property-logo.jpg",
+      "sky-property-logo.svg",
+      "logo.png",
+      "logo.jpg",
+      "logo.svg",
+      "logo4.png",
+      "sky-property.png",
+      "sky-property.jpg"
+    ];
+
+    const tryLoadLogo = (index: number) => {
+      if (index >= logoNames.length) return; // No logo found
+      
+      const logoImg = new Image();
+      logoImg.onload = () => {
+        setLogoUrl(`/assets/images/${logoNames[index]}`);
+      };
+      logoImg.onerror = () => {
+        tryLoadLogo(index + 1); // Try next name
+      };
+      logoImg.src = `/assets/images/${logoNames[index]}`;
+    };
+
+    tryLoadLogo(0);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -157,6 +200,9 @@ export function Login() {
 
       localStorage.setItem("token", res.token);
       localStorage.setItem("user", JSON.stringify(res.user));
+
+      // Dispatch event to notify ThemeContext of user change
+      window.dispatchEvent(new Event('userChanged'));
 
       toast.success(`Welcome back, ${res.user.name}`);
 
@@ -175,59 +221,94 @@ export function Login() {
         default:
           navigate("/dashboard");
       }
-    } catch (error) {
-      toast.error("Invalid email or password");
+    } catch (error: any) {
+      // Handle rate limiting (429) errors
+      if (error.response?.status === 429) {
+        const retryAfter = error.response?.headers?.['retry-after'] || error.response?.headers?.['x-ratelimit-reset'];
+        const message = error.response?.data?.message || "Too many login attempts. Please wait a moment and try again.";
+        toast.error(message, {
+          duration: 5000,
+          description: retryAfter ? `Please try again after ${retryAfter} seconds.` : undefined
+        });
+      } else if (error.response?.status === 400 || error.response?.status === 401) {
+        toast.error(error.response?.data?.message || "Invalid email or password");
+      } else {
+        toast.error("Login failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[#0a0c10]">
+    <div className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       {/* Background Image with Overlay */}
-      <div 
-        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-        style={{ 
-          backgroundImage: `url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop')`, // Waxaad ku beddeli kartaa sawirkaaga rasmiga ah
-        }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0c10]/60 to-[#0a0c10]/90 backdrop-blur-[2px]"></div>
+      <div className="absolute inset-0 z-0 overflow-hidden">
+        {/* Background Image Layer */}
+        <div 
+          className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: 'url(/assets/images/login-bg.jpg)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }}
+        ></div>
+        {/* Overlay - Light overlay for simpler background */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/40"></div>
       </div>
 
       {/* Login Card */}
-      <div className="relative z-10 w-full max-w-[420px] px-6">
-        <div className="bg-[#161b22]/90 backdrop-blur-md border border-gray-700/50 rounded-2xl shadow-2xl p-8">
+      <div className="relative z-10 w-full max-w-md px-4">
+        <div className="bg-[#161b22]/95 dark:bg-gray-900/95 backdrop-blur-md border border-gray-700/50 dark:border-gray-600/50 rounded-2xl shadow-2xl px-8 pt-2 pb-8">
           
-          {/* Header Section */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-600 rounded-xl mb-4 shadow-lg shadow-blue-600/20">
-              <LockClosedIcon className="w-6 h-6 text-white" />
+          {/* Sky Property Branding */}
+          <div className="text-center mb-6 -mt-1">
+            <div className="flex justify-center mb-0">
+              <div className="w-full h-32 flex items-center justify-center">
+                {logoUrl ? (
+                  <img 
+                    src={logoUrl} 
+                    alt="Sky Property Logo"
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-white text-xl font-black">
+                    SP
+                  </div>
+                )}
+              </div>
             </div>
-            <h1 className="text-2xl font-black text-white tracking-tight mb-1">
-              BMS Secure Login
+            <h1 className="text-2xl font-black text-white dark:text-gray-100 tracking-tight mt-0 mb-1">
+              Sky Property
             </h1>
-            <p className="text-gray-400 text-sm font-medium">
-              Professional Building Management System
+            <p className="text-gray-400 dark:text-gray-300 text-xs font-medium uppercase tracking-wider">
+              Building Management System
             </p>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <div className="h-px w-8 bg-gray-700"></div>
+              <ShieldCheckIcon className="w-3.5 h-3.5 text-blue-500" />
+              <div className="h-px w-8 bg-gray-700"></div>
+            </div>
           </div>
 
           {/* Form Section */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email Field */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                <EnvelopeIcon className="w-3.5 h-3.5" />
                 Email Address
               </label>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <EnvelopeIcon className="h-5 w-5 text-gray-500 group-focus-within:text-blue-500 transition-colors" />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <EnvelopeIcon className="h-4 w-4 text-gray-500 group-focus-within:text-blue-500 transition-colors" />
                 </div>
                 <input
                   name="email"
                   type="email"
                   required
                   placeholder="name@company.com"
-                  className="w-full bg-[#0d1117] border border-gray-700 text-white text-sm rounded-xl py-3.5 pl-11 pr-4 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-gray-600"
+                  className="w-full bg-[#0d1117] dark:bg-gray-800 border border-gray-700 dark:border-gray-600 text-white dark:text-gray-200 text-sm rounded-lg py-2.5 pl-10 pr-4 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 focus:ring-1 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 transition-all placeholder:text-gray-600 dark:placeholder:text-gray-500"
                 />
               </div>
             </div>
@@ -235,30 +316,34 @@ export function Login() {
             {/* Password Field */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center px-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <LockClosedIcon className="w-3.5 h-3.5" />
                   Password
                 </label>
-                <button type="button" className="text-[11px] font-bold text-blue-500 hover:text-blue-400 transition-colors uppercase">
+                <button 
+                  type="button" 
+                  className="text-[10px] font-bold text-blue-500 hover:text-blue-400 transition-colors uppercase"
+                >
                   Forgot?
                 </button>
               </div>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <LockClosedIcon className="h-5 w-5 text-gray-500 group-focus-within:text-blue-500 transition-colors" />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <LockClosedIcon className="h-4 w-4 text-gray-500 group-focus-within:text-blue-500 transition-colors" />
                 </div>
                 <input
                   name="password"
                   type={showPassword ? "text" : "password"}
                   required
                   placeholder="••••••••"
-                  className="w-full bg-[#0d1117] border border-gray-700 text-white text-sm rounded-xl py-3.5 pl-11 pr-12 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder:text-gray-600"
+                  className="w-full bg-[#0d1117] dark:bg-gray-800 border border-gray-700 dark:border-gray-600 text-white dark:text-gray-200 text-sm rounded-lg py-2.5 pl-10 pr-10 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 focus:ring-1 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 transition-all placeholder:text-gray-600 dark:placeholder:text-gray-500"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-500 hover:text-gray-300 transition-colors"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-300 transition-colors"
                 >
-                  {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                  {showPassword ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                 </button>
               </div>
             </div>
@@ -268,9 +353,9 @@ export function Login() {
               <input
                 id="remember"
                 type="checkbox"
-                className="w-4 h-4 rounded border-gray-700 bg-[#0d1117] text-blue-600 focus:ring-blue-500 focus:ring-offset-[#161b22]"
+                className="w-3.5 h-3.5 rounded border-gray-700 bg-[#0d1117] text-blue-600 focus:ring-blue-500 focus:ring-offset-[#161b22]"
               />
-              <label htmlFor="remember" className="ml-2 text-xs font-medium text-gray-400">
+              <label htmlFor="remember" className="ml-2 text-xs font-medium text-gray-400 dark:text-gray-300">
                 Remember this device
               </label>
             </div>
@@ -279,14 +364,14 @@ export function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full bg-blue-600 dark:bg-blue-500 hover:bg-blue-500 dark:hover:bg-blue-400 text-white font-bold py-2.5 rounded-lg shadow-lg shadow-blue-600/20 dark:shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
                   <span>Sign In</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
                   </svg>
                 </>
@@ -295,22 +380,22 @@ export function Login() {
           </form>
 
           {/* Footer Info */}
-          <div className="mt-8 pt-6 border-t border-gray-700/50 text-center">
-             <p className="text-gray-500 text-xs font-medium">
-              New tenant? <button className="text-blue-500 hover:underline font-bold">Contact Administrator</button>
+          <div className="mt-6 pt-5 border-t border-gray-700/50 text-center">
+            <p className="text-gray-500 dark:text-gray-400 text-xs font-medium">
+              New tenant? <button className="text-blue-500 dark:text-blue-400 hover:underline font-bold">Contact Administrator</button>
             </p>
           </div>
         </div>
 
         {/* Security Badge */}
-        <div className="mt-6 flex items-center justify-center gap-2 text-[10px] text-gray-500 font-bold uppercase tracking-[2px]">
-          <div className="h-[1px] w-8 bg-gray-800"></div>
-          <span className="flex items-center gap-1.5">
-            <svg className="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/></svg>
-            Secure 256-bit Encrypted Connection
-          </span>
-          <div className="h-[1px] w-8 bg-gray-800"></div>
-        </div>
+          <div className="mt-4 flex items-center justify-center gap-2 text-[9px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">
+            <div className="h-[1px] w-6 bg-gray-800 dark:bg-gray-600"></div>
+            <span className="flex items-center gap-1">
+              <ShieldCheckIcon className="w-3 h-3 text-green-500 dark:text-green-400" />
+              Secure Connection
+            </span>
+            <div className="h-[1px] w-6 bg-gray-800 dark:bg-gray-600"></div>
+          </div>
       </div>
     </div>
   );

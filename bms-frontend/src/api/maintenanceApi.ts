@@ -1,5 +1,5 @@
 // src/api/maintenanceApi.ts
-import axios from "axios";
+import { api } from "./client";
 
 export interface MaintenanceRequest {
   _id: string;
@@ -32,31 +32,31 @@ export interface Approval {
 }
 
 export const getMaintenanceRequests = async (status?: string) => {
-  const res = await axios.get('/api/maintenance', { params: { status } });
+  const res = await api.get('/api/maintenance', { params: { status } });
   return res.data as MaintenanceRequest[];
 };
 
 export const getBuildings = async () => {
-  const res = await axios.get('/api/buildings');
+  const res = await api.get('/api/buildings');
   return res.data as Building[];
 };
 
 export const getPendingApprovals = async () => {
-  const res = await axios.get('/api/maintenance/pending-approvals');
+  const res = await api.get('/api/maintenance/pending-approvals');
   return res.data as Approval[];
 };
 
 export const createMaintenanceRequest = async (data: Partial<MaintenanceRequest>) => {
-  const res = await axios.post('/api/maintenance', data);
+  const res = await api.post('/api/maintenance', data);
   return res.data;
 };
 
 export const updateMaintenanceStatus = async (requestId: string, data: Partial<MaintenanceRequest>) => {
-  const res = await axios.put(`/api/maintenance/${requestId}`, data);
+  const res = await api.put(`/api/maintenance/${requestId}`, data);
   return res.data;
 };
 
 export const processApproval = async (approvalId: string, status: 'approved' | 'rejected', comments?: string) => {
-  const res = await axios.post(`/api/maintenance/approvals/${approvalId}`, { status, comments });
+  const res = await api.post(`/api/maintenance/approvals/${approvalId}`, { status, comments });
   return res.data;
 };

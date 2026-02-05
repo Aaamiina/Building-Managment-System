@@ -7,6 +7,10 @@
   --color-dark: #171717;
 }
 
+html {
+  font-size: 80%; /* Unzoomed effect: Scales down all rem-based sizing */
+}
+
 .accent-text {
   @apply text-slate-600;
 }

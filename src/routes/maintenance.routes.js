@@ -15,7 +15,7 @@ const role = require("../middleware/role");
 router.post(
   "/",
   auth,
-  role("MANAGER", "SUPER_MANAGER"), // only managers can create
+  role("MANAGER", "SUB_MANAGER"), // only managers can create
   createRequest
 );
 
